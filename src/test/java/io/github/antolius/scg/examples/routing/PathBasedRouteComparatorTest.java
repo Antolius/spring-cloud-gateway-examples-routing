@@ -6,28 +6,34 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mockito;
 import org.springframework.cloud.gateway.route.Route;
-import org.springframework.web.util.pattern.PathPatternParser;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 
-import static io.github.antolius.scg.examples.routing.PathBasedRouteComparator.PATH;
 import static org.assertj.core.api.BDDAssertions.then;
 import static org.mockito.BDDMockito.given;
 
 public class PathBasedRouteComparatorTest {
 
-    private final PathBasedRouteComparator comparator = new PathBasedRouteComparator(
-            new PathPatternParser()
-    );
+    private final PathBasedRouteComparator comparator = new PathBasedRouteComparator();
 
     private static Stream<Arguments> testData() {
         return Stream.of(
-                Arguments.of("/1/**", "/1/bars", 1),
-                Arguments.of("/1/bars", "/1/**", -1),
-                Arguments.of("/1/bars", "/1/foos", 0)
+                Arguments.of("/1/**", 0, "/1/bars", 0, 1),
+                Arguments.of("/1/bars", 0, "/1/**", 0, -1),
+                Arguments.of("/1/{path-var}", 0, "/1/bars", 0, 1),
+                Arguments.of("/1/bars", 0, "/1/{path-var}", 0, -1),
+                Arguments.of("/1/bars", 0, "/1/foos", 0, 0),
+                Arguments.of("/1/bars", 1, "/1/foos", 0, 1),
+                Arguments.of("/1/bars", 0, "/1/foos", 1, -1),
+                Arguments.of("/1/bars", 0, "/1/bars", 0, 0),
+                Arguments.of("/1/bars", 1, "/1/bars", 0, 1),
+                Arguments.of("/1/bars", 0, "/1/bars", 1, -1),
+                Arguments.of(null, 0, null, 0, 0),
+                Arguments.of(null, 0, null, 1, -1),
+                Arguments.of(null, 1, null, 0, 1)
         );
     }
 
@@ -35,12 +41,14 @@ public class PathBasedRouteComparatorTest {
     @MethodSource("testData")
     public void shouldCompareCorrectly(
             String givenFirstPath,
+            Integer givenFirstOrder,
             String givenSecondPath,
+            Integer givenSecondOrder,
             int expectedSignum
     ) {
         // given
-        var givenFirstRoute = givenRouteForPath(givenFirstPath);
-        var givenSecondRoute = givenRouteForPath(givenSecondPath);
+        var givenFirstRoute = givenRouteForPath(givenFirstPath, givenFirstOrder);
+        var givenSecondRoute = givenRouteForPath(givenSecondPath, givenSecondOrder);
 
         // when
         var actual = comparator.compare(givenFirstRoute, givenSecondRoute);
@@ -53,9 +61,10 @@ public class PathBasedRouteComparatorTest {
     void shouldSortRoutesCorrectly() {
         // given
         var givenRoutes = List.of(
-                givenRouteForPath("/1/**"),
-                givenRouteForPath("/1/bars/{id}"),
-                givenRouteForPath("/1/bars/special")
+                givenRouteForPath("/1/**", 0),
+                givenRouteForPath("/1/bars/{id}", 0),
+                givenRouteForPath("/1/bars/special", 1),
+                givenRouteForPath("/1/bars/unique", 0)
         );
 
         // when
@@ -66,16 +75,22 @@ public class PathBasedRouteComparatorTest {
         // then
         then(actual).extracting(Route::getId)
                 .containsExactly(
+                        "/1/bars/unique",
                         "/1/bars/special",
                         "/1/bars/{id}",
                         "/1/**"
                 );
     }
 
-    private Route givenRouteForPath(String givenPath) {
+    private Route givenRouteForPath(String givenPath, Integer givenOrder) {
         var mockRoute = Mockito.mock(Route.class);
         given(mockRoute.getId()).willReturn(givenPath);
-        given(mockRoute.getMetadata()).willReturn(Map.of(PATH, givenPath));
+        given(mockRoute.getOrder()).willReturn(givenOrder);
+        if (givenPath != null) {
+            given(mockRoute.getMetadata()).willReturn(Map.of(
+                    PathInfo.KEY, PathInfo.from(givenPath)
+            ));
+        }
         return mockRoute;
     }
 

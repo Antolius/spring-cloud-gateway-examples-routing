@@ -37,7 +37,7 @@ public class MultiRouteHandlerMapping extends RoutePredicateHandlerMapping {
      * Returns Route that best matches given exchange, taking into account
      * all matching routes.
      * <p>
-     * Implementation is taken from the parent class' {@code lookupRoute}
+     * Implementation is copied from the parent class' {@code lookupRoute}
      * method with one key difference: this version sorts all matching paths
      * and only then takes the most exact one.
      *
